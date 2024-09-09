@@ -3,10 +3,10 @@ const app = express()
 require('dotenv').config()
 const cors = require('cors')
 const cookieParser = require('cookie-parser')
-const { MongoClient, ServerApiVersion } = require('mongodb')
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb')
 const jwt = require('jsonwebtoken')
 const morgan = require('morgan')
-const port = process.env.PORT || 8000
+const port = process.env.PORT || 5000
 
 // middleware
 const corsOptions = {
@@ -20,7 +20,7 @@ app.use(cookieParser())
 app.use(morgan('dev'))
 const verifyToken = async (req, res, next) => {
   const token = req.cookies?.token
-  console.log(token)
+  console.log("token", token)
   if (!token) {
     return res.status(401).send({ message: 'unauthorized access' })
   }
@@ -43,6 +43,9 @@ const client = new MongoClient(process.env.DB_URI, {
 })
 async function run() {
   try {
+    // Collection
+    const trainnerCollection = client.db('theFitness').collection('trainner')
+    const usersCollection = client.db('theFitness').collection('users')
     // auth related api
     app.post('/jwt', async (req, res) => {
       const user = req.body
@@ -58,7 +61,6 @@ async function run() {
         })
         .send({ success: true })
     })
-
     // Logout
     app.get('/logout', async (req, res) => {
       try {
@@ -75,6 +77,74 @@ async function run() {
       }
     })
 
+    // get all  trainners from server 
+    app.get('/trainners', async (req, res) => {
+      const result = await trainnerCollection.find().toArray()
+      res.send(result)
+    })
+    // B.1 save a trainner in db 
+    app.post('/users', async (req, res) => {
+      const roomData = req.body
+      const result = await usersCollection.insertOne(roomData)
+      res.send(result);
+    })
+
+    // A.2 Get single trainner details  from data from db using _id
+    app.get("/trainnerDetails/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log('trainner id ', id)
+      const query = { _id: new ObjectId(id) }
+      const result = await trainnerCollection.findOne(query);
+      console.log("result", result)
+      res.send(result)
+    })
+
+    // A.3 Get single trainner details  from data from db using _id  for payment page  
+    app.get("/paymentPage/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log('trainner id ', id)
+      const query = { _id: new ObjectId(id) }
+      const result = await trainnerCollection.findOne(query);
+      console.log("result", result)
+      res.send(result)
+    })
+
+    // get a user info by email from db 
+    app.get('/users/:email', async (req, res) => {
+      const email = req.params.email
+      const result = await usersCollection.findOne({ email })
+      res.send(result)
+    })
+    
+    app.put('/user', async (req, res) => {
+      const user = req.body;
+      const query = { email: user?.email };
+      const isExist = await usersCollection.findOne(query);
+      if (isExist) {
+        if (user.status === "requested") {
+          // If existing user tries to change their role
+          const result = await usersCollection.updateOne(query, {
+            $set: { status: user?.status }
+          });
+          // If existing user logs in again
+          return res.send(result);
+        } else {
+          // If the user exists but no status change is needed, return the existing user
+          return res.send(isExist);
+        }
+      }
+      // If user does not exist, save the user for the first time
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: {
+          ...user,
+          timestamp: Date.now(),
+        },
+      };
+      const result = await usersCollection.updateOne(query, updateDoc, options);
+      res.send(result);
+    });
+
     // Save or modify user email, status in DB
     app.put('/users/:email', async (req, res) => {
       const email = req.params.email
@@ -87,10 +157,15 @@ async function run() {
       const result = await usersCollection.updateOne(
         query,
         {
-          $set: { ...user, timestamp: Date.now() },
+          $set: { ...user },
         },
         options
       )
+      res.send(result)
+    })
+    // Get all usersa from db 
+    app.get('/users', verifyToken, async (req, res) => {
+      const result = await usersCollection.find().toArray()
       res.send(result)
     })
 
