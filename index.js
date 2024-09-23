@@ -46,6 +46,18 @@ async function run() {
     // Collection
     const trainnerCollection = client.db('theFitness').collection('trainner')
     const usersCollection = client.db('theFitness').collection('users')
+    const ClassCollection = client.db('theFitness').collection('class')
+    const appliedTrainerCollection = client.db('theFitness').collection('appliedTrainer');
+
+    // Verify admin middle  ware 
+    const verifyAdmin = async (req, res, next) => {
+      console.log("hello")
+      const user = req.user
+      const query = { email: user?.email }
+      const result = await usersCollection.findOne(query)
+      if (!result || result?.role !== "admin") return res.status(401).send({ message: "Forbidden Access" })
+      next()
+    }
     // auth related api
     app.post('/jwt', async (req, res) => {
       const user = req.body
@@ -76,19 +88,52 @@ async function run() {
         res.status(500).send(err)
       }
     })
-
+    app.get("/user" , async (req , res) => {
+      const result = await usersCollection.find().toArray() 
+      res.send(result)
+    })
+     
     // get all  trainners from server 
     app.get('/trainners', async (req, res) => {
       const result = await trainnerCollection.find().toArray()
       res.send(result)
     })
+    // get all  trainners from server 
+    app.post('/trainners', async (req, res) => {
+      const formData = req.body
+      const result = await trainnerCollection.insertOne(formData)
+      res.send(result)
+    })
+
     // B.1 save a trainner in db 
     app.post('/users', async (req, res) => {
       const roomData = req.body
       const result = await usersCollection.insertOne(roomData)
       res.send(result);
     })
-
+     // save a class in class collection 
+     app.post('/class', verifyToken, verifyAdmin, async (req, res) => {
+      const classData = req.body
+      const result = await ClassCollection.insertOne(classData)
+      res.send(result);
+    })   
+    // get class 
+     app.get('/class' , async (req, res) => {  
+      const page = parseInt(req.query.page) 
+      const size = parseInt(req.query.size)
+      const result = await ClassCollection.find()
+      .skip(page * size)
+      .limit(size)
+      .toArray()  
+      res.send(result)
+      console.log(result)
+     })
+    // get classCount 
+    app.get('/classCount' , async (req , res) => {
+      const count = await ClassCollection.countDocuments() ;
+      console.log(count)
+      res.send({count})
+    })
     // A.2 Get single trainner details  from data from db using _id
     app.get("/trainnerDetails/:id", async (req, res) => {
       const id = req.params.id;
@@ -97,8 +142,8 @@ async function run() {
       const result = await trainnerCollection.findOne(query);
       console.log("result", result)
       res.send(result)
-    })
-
+    }) 
+    
     // A.3 Get single trainner details  from data from db using _id  for payment page  
     app.get("/paymentPage/:id", async (req, res) => {
       const id = req.params.id;
@@ -115,7 +160,12 @@ async function run() {
       const result = await usersCollection.findOne({ email })
       res.send(result)
     })
-    
+    // Get all usersa from db 
+    app.get('/users', verifyToken, async (req, res) => {
+      const result = await usersCollection.find().toArray()
+      res.send(result)
+    })
+
     app.put('/user', async (req, res) => {
       const user = req.body;
       const query = { email: user?.email };
@@ -149,6 +199,7 @@ async function run() {
     app.put('/users/:email', async (req, res) => {
       const email = req.params.email
       const user = req.body
+
       const query = { email: email }
       const options = { upsert: true }
       const isExist = await usersCollection.findOne(query)
@@ -163,6 +214,7 @@ async function run() {
       )
       res.send(result)
     })
+    
     // Get all usersa from db 
     app.get('/users', verifyToken, async (req, res) => {
       const result = await usersCollection.find().toArray()
