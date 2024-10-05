@@ -47,13 +47,12 @@ const client = new MongoClient(process.env.DB_URI, {
 
 async function run() {
   try {
-    await client.connect();
-
+    // await client.connect();
     // Collections
     const trainnerCollection = client.db('theFitness').collection('trainner');
     const usersCollection = client.db('theFitness').collection('users');
     const ClassCollection = client.db('theFitness').collection('class');
-    const appliedTrainerCollection = client.db('theFitness').collection('appliedTrainer');
+    // const appliedTrainerCollection = client.db('theFitness').collection('appliedTrainer');
 
     // Verify admin middleware
     const verifyAdmin = async (req, res, next) => {
@@ -65,24 +64,6 @@ async function run() {
       }
       next();
     };
-    app.get('/users-email' , async (req, res) => {
-      const email = req.query.email; // Get email from the route parameter
-      console.log("email" , email)
-      // const result = await usersCollection.findOne(email );
-      // res.send(result);
-      // if (!email) {
-      //   return res.status(400).send({ message: 'Email is required' });
-      // }
-      // try {
-      //   const result = await usersCollection.findOne({ email });
-      //   if (!result) {
-      //     return res.status(404).send({ message: 'User not found' });
-      //   }
-      //   res.send(result);
-      // } catch (error) {
-      //   res.status(500).send({ message: 'Error fetching user', error });
-      // }
-    });
     // Authentication-related APIs
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -95,6 +76,36 @@ async function run() {
         })
         .send({ success: true });
     });
+  // Confirm a trainer application or update user details
+
+// save a user in db 
+  app.put('/new-user', async (req, res) => {
+    const user = req.body;
+  
+    const options = {upsert : true}
+    const query = { email: user?.email };  
+    const isExist = await usersCollection.findOne(query);
+    console.log(isExist)
+    if (isExist) {
+      const updateDoc = {
+        $set: {
+          ...user, 
+          status: 'Verified',  
+          timestamp: Date.now(),  
+        },
+      };
+      const result = await usersCollection.updateOne(query, updateDoc , options);
+      return res.send(result);
+    } else {
+      // If the user doesn't exist, return an appropriate response
+      const result = await usersCollection.insertOne(user) ;
+      console.log( "Result" , result)
+      return res.send(result)  
+     
+      // return res.status(404).send({ message: 'User not found' });
+    }
+  });
+
 
     // Logout route
     app.get('/logout', async (req, res) => {
@@ -156,6 +167,15 @@ async function run() {
       res.send(result);
     });
 
+    app.get('/test', async (req, res) => {
+      const email = req.query.email; // Get email from the route parameter
+      console.log("email", email)
+      const filter = { email: email };
+      const result = await usersCollection.findOne(filter);
+      console.log(result)
+      res.send(result);
+    });
+
     // Get the class count
     app.get('/classCount', async (req, res) => {
       const count = await ClassCollection.countDocuments();
@@ -188,11 +208,8 @@ async function run() {
     });
 
     // Get a user's info by email
-   
-
-
     // Get users with status 'Requested'
-    app.get('/requested-users',  async (req, res) => {
+    app.get('/requested-users', async (req, res) => {
       try {
         const result = await usersCollection.find({ status: 'Requested' }).toArray();
         res.status(200).send(result);
@@ -202,34 +219,96 @@ async function run() {
     });
 
     // Confirm a trainer application
-    app.put('/user', async (req, res) => {
-      const user = req.body;
-      // console.log("User", user)
+    // app.put('/user', async (req, res) => {
+    //   const user = req.body;
+    //   // console.log("User", user)
 
-      const query = { email: user?.email };
-      const isExist = await usersCollection.findOne(query);
-      if (isExist) {
-        if (user.status === 'requested') {
-          const result = await usersCollection.updateOne(query, { $set: { status: user?.status } });
-          return res.send(result);
-        } else {
-          return res.send(isExist);
-        }
-      }
-      const options = { upsert: true };
-      const updateDoc = { $set: { ...user, timestamp: Date.now() } };
-      const result = await usersCollection.updateOne(query, updateDoc, options);
+    //   const query = { email: user?.email };
+    //   const isExist = await usersCollection.findOne(query);
+    //   if (isExist) {
+    //     if (user.status === 'requested') {
+    //       const result = await usersCollection.updateOne(query, { $set: { status: user?.status } });
+    //       return res.send(result);
+    //     } else {
+    //       return res.send(isExist);
+    //     }
+    //   }
+    //   const options = { upsert: true };
+    //   const updateDoc = { $set: { ...user, timestamp: Date.now() } };
+    //   const result = await usersCollection.updateOne(query, updateDoc, options);
+    //   res.send(result);
+    // });
+
+  
+
+    // Upadte user role 
+    // app.patch("/changes/update/:email", async (req, res) => {
+    //   const email = req.params.email;
+    //   const query = { email }
+    //   const user = req.body
+    //   // console.log("user124", user)
+    //   const updateDoc = {
+    //     $set: {
+    //       ...user, timestamp: Date.now()
+    //     },
+    //   }
+    //   const result = await usersCollection.updateOne(query, updateDoc)
+    //   res.send(result)
+    // })
+
+    // app.patch("/changes/update/:email", async (req, res) => {
+    //   const email = req.params.email;
+    //   console.log("Email received:", email);  // Add this to check if the email is received
+    //   const user = req.body;
+    //   const updateDoc = {
+    //     $set: {
+    //       ...user, timestamp: Date.now()
+    //     },
+    //   };
+    //   const result = await usersCollection.updateOne({ email }, updateDoc);
+    //   res.send(result);
+    // });
+    app.patch("/changes/update/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+      const updateDoc = {
+          $set: {
+              ...user, 
+              timestamp: Date.now()
+          },
+      };
+  
+      const result = await usersCollection.updateOne({ email }, updateDoc);
       res.send(result);
-    });
+  });
+  
+
 
     // Get all users from the database
-    app.get('/users', async (req, res) => {
+    app.get('/users', verifyToken, async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-
+            // Save or modify user email, status in DB
+    app.put('/users/:email', async (req, res) => {
+      const email = req.params.email
+      const user = req.body
+      const query = { email: email }
+      const options = { upsert: true }
+      const isExist = await usersCollection.findOne(query)
+      console.log('User found?----->', isExist)
+      if (isExist) return res.send(isExist)
+      const result = await usersCollection.updateOne(
+        query,
+        {
+          $set: { ...user, timestamp: Date.now() },
+        },
+        options
+      )
+      res.send(result)
+    })
     // Ping MongoDB to confirm successful connection
-    await client.db('admin').command({ ping: 1 });
+    // await client.db('admin').command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
   } catch (error) {
     console.error('Error during MongoDB connection or route setup:', error);
